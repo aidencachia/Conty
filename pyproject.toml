@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conty"
+version = "0.1.0"
+description = "Local macOS host-control proof for Conty"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+macos = [
+  "pyobjc-framework-Cocoa>=10.3,<13; sys_platform == 'darwin'",
+  "pyobjc-framework-Quartz>=10.3,<13; sys_platform == 'darwin'",
+  "pyobjc-framework-ApplicationServices>=10.3,<13; sys_platform == 'darwin'",
+]
+test = ["pytest>=8,<10"]
+dev = ["ruff>=0.14,<0.15"]
+
+[project.scripts]
+conty = "conty.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
