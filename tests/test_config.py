@@ -231,6 +231,16 @@ def test_examples(project_root):
         for action in snapshot.actions.values()
         if action["type"] == "media"
     )
+    presentation = snapshot.public()["dashboards"][0]["sections"][0]
+    assert presentation["layout"] == {"rows": 5, "columns": 3}
+    carousel, previous, next_slide, blackout, launch = presentation["widgets"]
+    assert previous["action"] == "previous_slide"
+    assert next_slide["action"] == "next_slide"
+    assert carousel["type"] == "powerpoint"
+    assert carousel["label"] == "PowerPoint"
+    assert "action" not in carousel
+    assert carousel["position"] == {"row": 1, "column": 1, "row_span": 2, "column_span": 3}
+    assert [blackout["action"], launch["action"]] == ["blackout", "open_powerpoint"]
     load_config(project_root / "examples/script.yaml")
 
 
@@ -326,6 +336,86 @@ def test_slider_requires_volume_set_and_validates_spans(config_file, style):
     edit(config_file, change_to_button)
     with pytest.raises(ConfigurationError, match="sliders require"):
         load_config(config_file, platform="darwin")
+
+
+@pytest.mark.parametrize("direct", [False, True])
+@pytest.mark.parametrize("use_size", [False, True])
+@pytest.mark.parametrize("label", [None, "My slides"])
+def test_powerpoint_grid_normalization_and_public_type(config_file, direct, use_size, label):
+    def change(data):
+        data["actions"] = {}
+        page = data["dashboards"][0]
+        section = page["sections"][0]
+        widget = {"id": "slides", "type": "powerpoint", "position": {"row": 1, "column": 1}}
+        if use_size:
+            widget["size"] = {"width": 3, "height": 2}
+        else:
+            widget["position"].update(row_span=2, column_span=3)
+        if label is not None:
+            widget["label"] = label
+        section["widgets"] = [widget]
+        if direct:
+            page.pop("sections")
+            page.update(layout=section["layout"], widgets=section["widgets"])
+
+    edit(config_file, change)
+    snapshot = load_config(config_file, platform="linux")
+    assert not snapshot.actions
+    public = snapshot.public()
+    widget = public["dashboards"][0]["sections"][0]["widgets"][0]
+    assert widget["type"] == "powerpoint"
+    assert widget["label"] == (label or "PowerPoint")
+    assert "action" not in widget
+    assert widget["position"] == {"row": 1, "column": 1, "row_span": 2, "column_span": 3}
+    assert json.loads(json.dumps(public)) == public
+    widget["type"] = "button"
+    assert snapshot.public()["dashboards"][0]["sections"][0]["widgets"][0]["type"] == "powerpoint"
+
+
+@pytest.mark.parametrize(
+    "fields,expected",
+    [
+        ({"action": "hello"}, "Extra inputs"),
+        ({"action": None}, "Extra inputs"),
+        ({"label": ""}, "at least 1 character"),
+        ({"label": None}, "valid string"),
+        ({"label": True}, "valid string"),
+        ({"size": {"width": True}}, "valid integer"),
+        ({"size": {"height": 0}}, "greater than 0"),
+        ({"position": {"row": 0, "column": 1}}, "greater than 0"),
+        (
+            {"position": {"row": 1, "column": 1, "column_span": 2}, "size": {"width": 3}},
+            "size conflicts",
+        ),
+        ({"size": {"width": 4}}, "exceeds section grid"),
+        ({"size": {"height": 3}}, "exceeds section grid"),
+        ({"position": {"row": 2, "column": 1}}, "overlaps widget 'second'"),
+        ({"id": "second"}, "duplicate ID"),
+    ],
+)
+def test_powerpoint_uses_standard_tile_validation(config_file, fields, expected):
+    def change(data):
+        data["dashboards"][0]["sections"][0]["widgets"].append(
+            {"id": "slides", "type": "powerpoint", "position": {"row": 1, "column": 1}, **fields}
+        )
+
+    edit(config_file, change)
+    with pytest.raises(ConfigurationError, match=expected) as caught:
+        load_config(config_file)
+    assert caught.value.diagnostics[0].path.startswith("dashboards[0].sections[0].widgets[2]")
+    assert caught.value.diagnostics[0].line is not None
+
+
+def test_powerpoint_coexists_with_action_widgets_in_grid_order(config_file):
+    def change(data):
+        data["dashboards"][0]["sections"][0]["widgets"].append(
+            {"id": "slides", "type": "powerpoint", "position": {"row": 1, "column": 1}}
+        )
+
+    edit(config_file, change)
+    widgets = load_config(config_file).public()["dashboards"][0]["sections"][0]["widgets"]
+    assert [widget["type"] for widget in widgets] == ["powerpoint", "button", "button"]
+    assert [widget["id"] for widget in widgets] == ["slides", "first", "second"]
 
 
 @pytest.mark.parametrize("style", ["unknown", "", True, None, 1])

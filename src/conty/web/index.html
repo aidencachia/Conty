@@ -11,6 +11,7 @@
     <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/assets/style.css" />
     <script src="/assets/app.js" defer></script>
+    <script src="/assets/presentations.js" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -53,6 +54,26 @@
           <nav id="pages" class="pages" aria-label="Dashboard pages"></nav>
           <p id="notice" class="notice" role="status" hidden></p>
           <div id="sections"></div>
+          <template id="powerpoint-template">
+          <section class="presentation-panel" aria-label="PowerPoint">
+            <div class="presentation-toolbar">
+            <select id="presentation-select" aria-label="Presentation" aria-busy="false">
+              <option value="">Choose a running presentation</option>
+            </select>
+              <button id="presentation-scan" type="button" aria-label="Scan presentations" title="Scan presentations" disabled>↻</button>
+              <button id="presentation-refresh" type="button" aria-label="Refresh previews" title="Refresh previews" disabled>⟳<</button>/button>
+            </div>
+            <p id="presentation-discovery-status" class="presentation-help" role="status" aria-atomic="true"></p>
+            <p id="presentation-info" class="presentation-help"></p>
+            <p id="presentation-selection-status" class="sr-only" role="status"></p>
+            <p id="presentation-message" class="presentation-help" role="status"></p>
+            <p id="presentation-preview-status" class="sr-only" role="status"></p>
+            <div class="presentation-actions">
+              <button id="presentation-retry-previews" type="button" aria-label="Retry failed previews" title="Retry failed previews" hidden>↻</button>
+            </div>
+            <div id="presentation-slides" class="slide-carousel" role="region" aria-roledescription="carousel" aria-label="Slides" tabindex="0"></div>
+          </section>
+          </template>
           <details class="activity">
             <summary>Activity <span id="pending-count"></span></summary>
             <ol id="activity-list">

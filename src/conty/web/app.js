@@ -122,6 +122,7 @@ function requirePairing() {
   $("dashboard").hidden = true;
   $("pairing").hidden = false;
   connection("Pairing required");
+  updateControls();
 }
 
 function updateControls() {
@@ -146,7 +147,10 @@ function updateControls() {
       ? `${count} pending`
       : state.feedback.get(key) || "Ready";
   }
+  document.dispatchEvent(new Event("conty:connection"));
 }
+
+const powerpointWidgets = new Map();
 
 function renderPage() {
   const dashboard = state.definition.dashboards.find(
@@ -190,6 +194,20 @@ function renderPage() {
       grid.style.gridTemplateRows = `repeat(${section.layout.rows}, 112px)`;
       for (const widget of section.widgets) {
         const key = `${dashboard.id}/${section.id}/${widget.id}`;
+        if (widget.type === "powerpoint") {
+          let panel = powerpointWidgets.get(key);
+          if (!panel) {
+            panel = createPowerPointWidget();
+            powerpointWidgets.set(key, panel);
+          }
+          panel.setAttribute("aria-label", widget.label);
+          panel.dataset.widget = widget.id;
+          panel.dataset.kind = widget.type;
+          panel.style.gridRow = `${widget.position.row} / span ${widget.position.row_span}`;
+          panel.style.gridColumn = `${widget.position.column} / span ${widget.position.column_span}`;
+          grid.append(panel);
+          continue;
+        }
         const slider = widget.type === "slider";
         const button = document.createElement(slider ? "div" : "button");
         if (!slider) button.type = "button";
@@ -271,6 +289,13 @@ function renderPage() {
       return wrapper;
     }),
   );
+  const validPowerpoints = new Set(state.definition.dashboards.flatMap((page) =>
+    page.sections.flatMap((section) => section.widgets.filter((widget) => widget.type === "powerpoint")
+      .map((widget) => `${page.id}/${section.id}/${widget.id}`))));
+  for (const [key, panel] of powerpointWidgets) if (!validPowerpoints.has(key)) {
+    panel.dispose();
+    powerpointWidgets.delete(key);
+  }
   updateControls();
   void refreshVolume();
 }

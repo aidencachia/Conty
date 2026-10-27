@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import logging
 import os
+import ssl
 import stat
 import tempfile
 from contextlib import contextmanager
@@ -36,14 +37,24 @@ def instance_lock(directory=None):
         os.close(descriptor)
 
 
-def serve(path):
+def serve(path, *, ssl_certfile=None, ssl_keyfile=None):
     import qrcode
     import uvicorn
 
     from conty.server import connection_urls, create_app
 
     snapshot = load_config(path)
+    if bool(ssl_certfile) != bool(ssl_keyfile):
+        raise ConfigurationError(
+            [Diagnostic("server", "Use both --ssl-certfile and --ssl-keyfile for HTTPS")]
+        )
     try:
+        if ssl_certfile:
+            ssl_certfile = str(Path(ssl_certfile).expanduser().resolve())
+            ssl_keyfile = str(Path(ssl_keyfile).expanduser().resolve())
+            # Fail before advertising a URL or requesting pairing with invalid TLS material.
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(ssl_certfile, ssl_keyfile, password=lambda: "")
         with instance_lock():
             logger = logging.getLogger("conty")
             if not logger.handlers:
@@ -53,22 +64,31 @@ def serve(path):
             logger.setLevel(logging.INFO)
             logger.propagate = False
             logger.info("service_starting revision=%s", snapshot.revision)
-            urls = connection_urls(snapshot)
+            urls = connection_urls(snapshot, scheme="https" if ssl_certfile else "http")
             for url in urls:
                 print(f"Dashboard: {url}")
             qr = qrcode.QRCode(border=2)
             qr.add_data(urls[0])
             qr.print_ascii(tty=False, invert=True)
-            print(
-                "Trusted-LAN HTTP: traffic is unencrypted. Ctrl-C stops the host and revokes all sessions.",
-                flush=True,
-            )
+            if ssl_certfile:
+                print(
+                    "HTTPS: use a certificate trusted by your clients. Ctrl-C revokes all sessions.",
+                    flush=True,
+                )
+            else:
+                print(
+                    "Trusted-LAN HTTP: traffic is unencrypted. "
+                    "Ctrl-C stops the host and revokes all sessions.",
+                    flush=True,
+                )
             uvicorn.run(
                 create_app(snapshot, owner_output=lambda line: print(line, flush=True)),
                 host=snapshot.server["bind"],
                 port=snapshot.server["port"],
                 workers=1,
                 proxy_headers=False,
+                ssl_certfile=ssl_certfile,
+                ssl_keyfile=ssl_keyfile,
                 access_log=False,
                 limit_concurrency=128,
                 backlog=128,

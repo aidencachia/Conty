@@ -54,34 +54,38 @@ actions:
 dashboards:
   - id: presentation
     title: Presentation
-    layout: {rows: 3, columns: 3}
+    layout: {rows: 5, columns: 3}
     widgets:
+      - id: powerpoint
+        type: powerpoint
+        position: {row: 1, column: 1}
+        size: {width: 3, height: 2}
       - id: previous
         type: button
         label: Previous
         symbol: "←"
         action: previous_slide
-        position: {row: 1, column: 1}
+        position: {row: 3, column: 1}
       - id: next
         type: button
         label: Next
         symbol: "→"
         action: next_slide
         appearance: primary
-        position: {row: 1, column: 3}
+        position: {row: 3, column: 3}
       - id: blackout
         type: button
         label: Blackout / restore
         symbol: "◐"
         action: blackout
-        position: {row: 2, column: 1}
+        position: {row: 4, column: 1}
         size: {width: 3, height: 1}
       - id: launch
         type: button
         label: Open PowerPoint
         symbol: "↗"
         action: open_powerpoint
-        position: {row: 3, column: 1}
+        position: {row: 5, column: 1}
         size: {width: 3, height: 1}
   - id: media
     title: Media

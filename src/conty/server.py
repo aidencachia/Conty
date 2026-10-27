@@ -20,6 +20,7 @@ from conty.adapters.base import AdapterError
 from conty.auth import APIError, Limiter, Sessions
 from conty.config import Identifier, Model, Snapshot
 from conty.executor import Executor
+from conty.presentations import PresentationHub, presentation_router
 from conty.runtime import Coordinator
 
 logger = logging.getLogger(__name__)
@@ -50,17 +51,17 @@ def authorities(snapshot):
     for host in hosts:
         host = f"[{host}]" if ":" in host else host.lower()
         result.add(f"{host}:{server['port']}")
-        if server["port"] == 80:
+        if server["port"] in (80, 443):
             result.add(host)
     return result
 
 
-def connection_urls(snapshot):
+def connection_urls(snapshot, *, scheme="http"):
     server = snapshot.server
     address = ipaddress.ip_address(server["bind"])
     hosts = list(server["allowed_hosts"]) if address.is_unspecified else [server["bind"]]
     return [
-        f"http://{'[' + host + ']' if ':' in host else host}:{server['port']}" for host in hosts
+        f"{scheme}://{'[' + host + ']' if ':' in host else host}:{server['port']}" for host in hosts
     ]
 
 
@@ -79,7 +80,9 @@ def error_response(exc: APIError):
     )
 
 
-def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output=print):
+def create_app(
+    snapshot: Snapshot, *, executor=None, sessions=None, powerpoint=None, owner_output=print
+):
     sessions = sessions if sessions is not None else Sessions(output=owner_output)
     executor = (
         executor
@@ -89,6 +92,9 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
         )
     )
     coordinator = Coordinator(snapshot, executor, sessions)
+    presentations = PresentationHub(
+        sessions, adapter=powerpoint, native_lock=getattr(executor, "_lock", None)
+    )
     traffic = Limiter(80, 40)
     global_traffic = Limiter(400, 200, capacity=1)
     accepted = authorities(snapshot)
@@ -98,6 +104,7 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
             await asyncio.sleep(1)
             sessions.maintain()
             coordinator.prune()
+            presentations.maintain()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -109,11 +116,14 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
         finally:
             timer.cancel()
             await asyncio.gather(timer, return_exceptions=True)
+            await presentations.close()
             await coordinator.stop()
             sessions.records.clear()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.coordinator, app.state.sessions = coordinator, sessions
+    app.state.presentations = presentations
+    app.include_router(presentation_router(presentations))
 
     @app.exception_handler(APIError)
     async def api_error(request, exc):
@@ -132,8 +142,9 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
             source = request.client.host if request.client else "unknown"
             if not global_traffic.allow("host") or not traffic.allow(source):
                 raise APIError(429, "request_rate_limited", "Too many requests")
+            body_limit = BODY_LIMIT
             content_length = request.headers.get("content-length", "0")
-            if not re.fullmatch(r"[0-9]{1,10}", content_length) or int(content_length) > BODY_LIMIT:
+            if not re.fullmatch(r"[0-9]{1,10}", content_length) or int(content_length) > body_limit:
                 raise APIError(413, "request_too_large", "Request body exceeds the limit")
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
                 expected_origin = f"{request.url.scheme}://{hosts[0].lower()}"
@@ -167,7 +178,7 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
                 body = bytearray()
                 async for chunk in request.stream():
                     body.extend(chunk)
-                    if len(body) > BODY_LIMIT:
+                    if len(body) > body_limit:
                         raise APIError(413, "request_too_large", "Request body exceeds the limit")
                 request._body = bytes(body)
 
@@ -192,6 +203,7 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
                 },
                 status_code=500,
             )
+
         response.headers.update(
             {
                 "Cache-Control": "no-store",
@@ -202,6 +214,7 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
                 "connect-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
             }
         )
+
         return response
 
     @app.post("/api/pair")
@@ -294,11 +307,12 @@ def create_app(snapshot: Snapshot, *, executor=None, sessions=None, owner_output
         )
 
     @app.get("/assets/{name}")
-    async def asset(name: Literal["app.js", "style.css", "icon.svg"]):
+    async def asset(name: Literal["app.js", "presentations.js", "style.css", "icon.svg"]):
         return Response(
             files("conty").joinpath("web", name).read_bytes(),
             media_type={
                 "app.js": "text/javascript",
+                "presentations.js": "text/javascript",
                 "style.css": "text/css",
                 "icon.svg": "image/svg+xml",
             }[name],

@@ -26,6 +26,16 @@ def parser() -> argparse.ArgumentParser:
     validate.add_argument("config")
     serve = commands.add_parser("serve", help="Serve a paired browser dashboard")
     serve.add_argument("config")
+    serve.add_argument("--ssl-certfile", help="TLS certificate chain PEM for optional HTTPS")
+    serve.add_argument("--ssl-keyfile", help="TLS private key PEM; use with --ssl-certfile")
+    powerpoint = commands.add_parser(
+        "powerpoint", help="Local PowerPoint permission setup; PowerPoint must already be running"
+    )
+    powerpoint_commands = powerpoint.add_subparsers(dest="powerpoint_command", required=True)
+    powerpoint_commands.add_parser(
+        "authorize",
+        help="Explicitly request PowerPoint Automation access (no launch or activation)",
+    )
     doctor = commands.add_parser(
         "doctor", help="Check capabilities and request missing Accessibility access"
     )
@@ -69,6 +79,17 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+async def _authorize_powerpoint() -> dict[str, bool]:
+    from conty.adapters.macos.powerpoint import NativePowerPoint
+
+    native = NativePowerPoint()
+    try:
+        report = await native.authorize()
+        return {"available": report.get("available") is True}
+    finally:
+        await native.close()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
@@ -82,11 +103,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else:
                     from conty.service import serve
 
-                    serve(args.config)
+                    tls = {}
+                    if args.ssl_certfile is not None or args.ssl_keyfile is not None:
+                        tls = {"ssl_certfile": args.ssl_certfile, "ssl_keyfile": args.ssl_keyfile}
+                    serve(args.config, **tls)
             except ConfigurationError as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
             return 0
+        if args.command == "powerpoint":
+            report = asyncio.run(_authorize_powerpoint())
+            print(json.dumps(report, indent=2))
+            return 0 if report["available"] else 1
         if args.command == "doctor":
             report = {
                 "python": sys.executable,

@@ -246,7 +246,12 @@ class Slider(Tile):
     style: Literal["standard", "ios"] = "standard"
 
 
-Widget = Annotated[Button | Slider, Field(discriminator="type")]
+class PowerPoint(Tile):
+    type: Literal["powerpoint"]
+    label: Label = "PowerPoint"
+
+
+Widget = Annotated[Button | Slider | PowerPoint, Field(discriminator="type")]
 
 
 class Section(Model):
@@ -466,18 +471,21 @@ def load_config(path: str | Path, *, platform: str | None = None) -> Snapshot:
             unique(section.widgets, parts)
             rectangles = []
             for wi, widget in enumerate(section.widgets):
-                if widget.action not in config.actions:
-                    errors.append(diagnostic((*parts, wi, "action"), "unknown action reference"))
-                else:
-                    action = config.actions[widget.action]
-                    dynamic = isinstance(action, Volume) and action.operation == "set"
-                    if isinstance(widget, Slider) != dynamic:
+                if isinstance(widget, (Button, Slider)):
+                    if widget.action not in config.actions:
                         errors.append(
-                            diagnostic(
-                                (*parts, wi, "action"),
-                                "sliders require a volume set action; buttons require a fixed action",
-                            )
+                            diagnostic((*parts, wi, "action"), "unknown action reference")
                         )
+                    else:
+                        action = config.actions[widget.action]
+                        dynamic = isinstance(action, Volume) and action.operation == "set"
+                        if isinstance(widget, Slider) != dynamic:
+                            errors.append(
+                                diagnostic(
+                                    (*parts, wi, "action"),
+                                    "sliders require a volume set action; buttons require a fixed action",
+                                )
+                            )
                 p = widget.position
                 bottom, right = p.row + p.row_span - 1, p.column + p.column_span - 1
                 if bottom > section.layout.rows or right > section.layout.columns:
