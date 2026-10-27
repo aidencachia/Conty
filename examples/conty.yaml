@@ -23,15 +23,15 @@ actions:
     argv: [/usr/bin/open, -a, Microsoft PowerPoint]
   previous_track:
     type: media
-    target: {app_id: com.apple.Music}
+    target: system
     command: previous_track
   play_pause:
     type: media
-    target: {app_id: com.apple.Music}
+    target: system
     command: play_pause
   next_track:
     type: media
-    target: {app_id: com.apple.Music}
+    target: system
     command: next_track
   volume_down:
     type: volume

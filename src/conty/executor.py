@@ -229,7 +229,7 @@ class Executor:
                 os.killpg(child.pid, sig)
             except ProcessLookupError:
                 pass
-            # Send KILL even when the leader exits on TERM: Music may still run.
+            # Send KILL even if the leader exits: a legacy script may still run.
             await asyncio.sleep(grace if sig == signal.SIGTERM else 0)
         try:
             await asyncio.wait_for(child.wait(), 1)
@@ -274,8 +274,8 @@ class Executor:
     async def check(self):
         if not self.native_types:
             return {"process": {"available": True}}
-        # Bound each capability separately so one slow Music check does not
-        # consume the keyboard/audio probe's deadline.
+        # Bound each capability separately so one slow check cannot consume
+        # another capability's probe deadline.
         readiness = {"process": {"available": True}}
         if self._diagnostics is None or not self._diagnostics.available:
             self._diagnostics = Executor(helper_command=self.helper_command, persistent=False)

@@ -2,7 +2,7 @@
 
 A YAML-driven browser dashboard for controlling your Mac over your local network.
 
-Milestone 2 implements configuration validation, pairing, a protected HTTP API, ordered execution and a phone-friendly dashboard. PowerPoint, Apple Music, system volume and configured processes use the existing host adapters. The owner reported verifying the Milestone 1 hardware proof; the new server/helper path still needs its separate MacBook/iPhone acceptance run.
+Milestone 2 implements configuration validation, pairing, a protected HTTP API, ordered execution and a phone-friendly dashboard. PowerPoint, generic media playback, system volume and configured processes use native host adapters. The owner reported verifying the Milestone 1 hardware proof; the new server/helper path still needs its separate MacBook/iPhone acceptance run.
 
 ## Setup
 
@@ -14,9 +14,9 @@ python3 -m venv .venv
 .venv/bin/conty doctor
 ```
 
-`doctor` requests a macOS Accessibility permission prompt if access is missing. Use the dialog's System Settings button to enable the launching terminal/editor or host, then rerun `doctor`. macOS may suppress repeat prompts; the report also includes a command to open the permission pane manually. Use `conty doctor --no-prompt` for passive checks. Neither mode sends keys, changes playback, or writes audio properties; Music Automation checks remain non-prompting. It exits nonzero if any native capability is unavailable, including while consent is pending. It reports the Python executable and launch-method caveat for permission troubleshooting.
+`doctor` requests a macOS Accessibility permission prompt if access is missing. Use the dialog's System Settings button to enable the launching terminal/editor or host, then rerun `doctor`. macOS may suppress repeat prompts; the report also includes a command to open the permission pane manually. Use `conty doctor --no-prompt` for passive checks. Neither mode sends keys, changes playback, or writes audio properties. The report checks keyboard, generic media and audio capabilities; Apple Music does not need to be running or authorized. It exits nonzero if any native capability is unavailable, including while consent is pending. It reports the Python executable and launch-method caveat for permission troubleshooting.
 
-Keyboard input uses optional PyObjC Cocoa, Quartz and ApplicationServices bridges. Music uses the system `osascript` JXA bridge; Core Audio and direct process execution use the standard library. Process execution and fake tests also work without the macOS extra. Tested dependency versions are recorded in the [host-control guide](documentation/milestone-1-host-control.md).
+Keyboard input and generic media use optional PyObjC Cocoa/Quartz bridges, with ApplicationServices for keyboard permission checks. Core Audio and direct process execution use the standard library. Only the legacy explicitly targeted Apple Music adapter uses `osascript`. Process execution and fake tests also work without the macOS extra. Tested dependency versions are recorded in the [host-control guide](documentation/milestone-1-host-control.md).
 
 ## Start a dashboard
 
@@ -44,6 +44,8 @@ The dashboard is a compact grid of labelled symbols. Set `position: {row: 1, col
 
 Native actions use a warmed supervised worker to avoid Python/framework startup on each tap, and the browser receives completion feedback through immediate batched status reads. Read-only health probes run separately from action dispatch. See the [latency checks](documentation/milestone-2-dashboard.md#latency-regression-checks) for repeatable benchmarks.
 
+The Media page sends system-wide previous/play-pause/next keys, so it can control Spotify and other players that handle macOS media keys. Start playback in your preferred player first. macOS decides which player handles each key; Conty neither selects Spotify specifically nor confirms playback state, and the system may resume or launch its default player when none is active. No Spotify account/API integration or Apple Music Automation permission is required. YAML media actions use `target: system` (also the default if omitted). Existing explicit `target: {app_id: com.apple.Music}` actions retain their original Apple Music-only behavior; change them to `target: system` to opt into generic routing.
+
 ## Explicit local tests
 
 **These commands have real desktop effects.** Open the intended applications and read the [permission/setup and acceptance guide](documentation/milestone-1-host-control.md) first.
@@ -62,10 +64,10 @@ Native actions use a warmed supervised worker to avoid Python/framework startup 
 # Explicit target, but never activate it with this policy.
 .venv/bin/conty keyboard right --app-id com.microsoft.Powerpoint --focus require_frontmost
 
-# Apple Music must already be running and Automation permission granted.
-.venv/bin/conty music play_pause
-.venv/bin/conty music previous_track
-.venv/bin/conty music next_track
+# Generic media keys: macOS routes them to the selected player, e.g. Spotify.
+.venv/bin/conty media play_pause
+.venv/bin/conty media previous_track
+.venv/bin/conty media next_track
 
 # Current default output device must support writable master volume AND mute.
 .venv/bin/conty volume adjust --delta 5
@@ -80,7 +82,7 @@ Keyboard actions use physical ANSI key names, not Unicode text typing; output de
 
 `app_id` defaults to `None`: capture the current frontmost running application and send only to that PID, without activation or retargeting. Termination and focus are rechecked immediately before dispatch; failure is fail-closed, with no global-input fallback. With explicit `--app-id`, the target must already be running and the default policy is `activate`; `--focus require_frontmost` checks without activation. Adapter/CLI `focus` defaults to `None`, selecting the appropriate implicit policy. Explicitly specifying a focus policy without an app ID returns `invalid_action`.
 
-Commands emit JSON and exit 0 on success, 1 on adapter failure, or 2 for CLI syntax errors. Errors distinguish permissions, unavailable targets/capabilities, focus failure, timeouts, and execution failure. `effects_possible` means that failure does **not** prove nothing happened. Keyboard/Music success means **dispatched**, not observed slide/playback state.
+Commands emit JSON and exit 0 on success, 1 on adapter failure, or 2 for CLI syntax errors. Errors distinguish permissions, unavailable targets/capabilities, focus failure, timeouts, and execution failure. `effects_possible` means that failure does **not** prove nothing happened. Keyboard/media success means **dispatched**, not observed slide/playback state. The legacy `conty music ...` command remains explicitly Apple Music-only and requires its existing Automation setup.
 
 Process output is bounded to 16 KiB per stream, decoded as UTF-8 with replacement, and printed **only to this local CLI**. Treat that output as potentially sensitive; do not use the internal result object as a future public API response. The child inherits only `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and `LANG=en_US.UTF-8`, plus explicit `--env-from CHILD_NAME=HOST_NAME` mappings. Add `HOME` or other variables explicitly when an executable requires them. `--cwd` must be absolute. Timeouts start at child execution, attempt TERM then KILL for the process group, and reap the child. Detached descendants/external effects cannot be undone. An `/usr/bin/open` success does not establish application readiness.
 

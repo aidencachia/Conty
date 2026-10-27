@@ -4,6 +4,8 @@
 
 The adapters, local CLI and automated tests are implemented. The owner reported completing the Milestone 1 hardware proof during Milestone 2 planning on 19 October 2026. Per-case results and application/display versions were not supplied, so the checklist below preserves its historical pending entries rather than inventing evidence. The separate [Milestone 2 server/helper acceptance](milestone-2-dashboard.md#hardware-acceptance) remains to be recorded.
 
+Milestone 2 now defaults media actions to generic system media keys, including Spotify support through macOS routing. Use `conty media ...`; `doctor` checks generic `media` capability instead of Apple Music. The Apple Music-specific details below remain historical/legacy behavior for `conty music ...` or explicitly targeted Music actions, not requirements for the generic Media page.
+
 Implementation environment: Python 3.11.1; PyObjC 12.2.2; pytest 9.1.1. Dependency ranges live in `pyproject.toml`; these are the versions used for this validation, not a claim of testing every compatible version. Application, macOS and presentation-display versions remain to be recorded during acceptance.
 
 ## Local entry point

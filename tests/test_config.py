@@ -225,8 +225,23 @@ def test_support_checks_are_separate_from_readiness(config_file, monkeypatch):
 
 
 def test_examples(project_root):
-    load_config(project_root / "examples/conty.yaml", platform="darwin")
+    snapshot = load_config(project_root / "examples/conty.yaml", platform="darwin")
+    assert all(
+        action["target"] == "system"
+        for action in snapshot.actions.values()
+        if action["type"] == "media"
+    )
     load_config(project_root / "examples/script.yaml")
+
+
+@pytest.mark.parametrize("target", [None, "system", {"app_id": "com.apple.Music"}])
+def test_media_defaults_to_system_and_preserves_explicit_legacy_target(config_file, target):
+    action = {"type": "media", "command": "play_pause"}
+    if target is not None:
+        action["target"] = target
+    edit(config_file, lambda data: data["actions"].update(hello=action))
+    compiled = load_config(config_file, platform="darwin").actions["hello"]
+    assert compiled["target"] == (target or "system")
 
 
 def test_hosts_are_canonicalized_and_wildcard_destinations_rejected(config_file):

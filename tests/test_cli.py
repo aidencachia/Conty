@@ -15,7 +15,13 @@ from conty.adapters.macos import keyboard
 @pytest.fixture
 def adapters(monkeypatch):
     factories = {}
-    for name in ("KeyboardAdapter", "MusicAdapter", "AudioAdapter", "ProcessAdapter"):
+    for name in (
+        "KeyboardAdapter",
+        "MediaAdapter",
+        "MusicAdapter",
+        "AudioAdapter",
+        "ProcessAdapter",
+    ):
         factory = Mock(name=name)
         adapter = factory.return_value
         adapter.check.return_value = {"available": True}
@@ -129,7 +135,7 @@ def test_focus_without_target_fails_before_native_calls(adapters, monkeypatch, c
 
 
 @pytest.mark.parametrize("options,should_prompt", [([], True), (["--no-prompt"], False)])
-@pytest.mark.parametrize("unavailable", [None, "KeyboardAdapter", "MusicAdapter", "AudioAdapter"])
+@pytest.mark.parametrize("unavailable", [None, "KeyboardAdapter", "MediaAdapter", "AudioAdapter"])
 def test_doctor_reports_all_capabilities(adapters, capsys, options, should_prompt, unavailable):
     if unavailable is not None:
         adapters[unavailable].return_value.check.return_value = {
@@ -148,7 +154,7 @@ def test_doctor_reports_all_capabilities(adapters, capsys, options, should_promp
     assert "launch" in report["permission_identity"].lower()
     for name, field in (
         ("KeyboardAdapter", "keyboard"),
-        ("MusicAdapter", "music"),
+        ("MediaAdapter", "media"),
         ("AudioAdapter", "audio"),
     ):
         factory = adapters[name]
@@ -160,9 +166,18 @@ def test_doctor_reports_all_capabilities(adapters, capsys, options, should_promp
             factory.return_value.check.assert_called_once_with()
         factory.return_value.execute.assert_not_called()
     adapters["ProcessAdapter"].assert_not_called()
+    adapters["MusicAdapter"].assert_not_called()
 
 
 ACTIONS = [
+    (["media", "play_pause"], "MediaAdapter", ("play_pause",), {"timeout": 5}),
+    (["media", "previous_track"], "MediaAdapter", ("previous_track",), {"timeout": 5}),
+    (
+        ["media", "next_track", "--timeout", "1.5"],
+        "MediaAdapter",
+        ("next_track",),
+        {"timeout": 1.5},
+    ),
     (
         ["keyboard", "space"],
         "KeyboardAdapter",

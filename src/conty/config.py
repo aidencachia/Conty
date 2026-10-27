@@ -167,7 +167,7 @@ class MusicTarget(Model):
 
 class Media(Action):
     type: Literal["media"]
-    target: MusicTarget
+    target: Literal["system"] | MusicTarget = "system"
     command: Literal["previous_track", "play_pause", "next_track"]
 
 

@@ -50,6 +50,13 @@ def live_server(snapshot, fake_executor):
         "operation": "set",
         "timeout_seconds": 5,
     }
+    for command in ("previous_track", "play_pause", "next_track"):
+        actions[command] = {
+            "type": "media",
+            "target": "system",
+            "command": command,
+            "timeout_seconds": 5,
+        }
     snapshot = replace(
         snapshot, server=freeze(server_config), _public=freeze(public), actions=freeze(actions)
     )
@@ -226,6 +233,34 @@ def test_reference_dashboards_render_locally(browser, live_server, project_root,
         page.set_viewport_size({"width": 1280, "height": 900})
         page.screenshot(path=str(tmp_path / "media-desktop.png"), full_page=True)
         assert not errors
+    finally:
+        context.close()
+
+
+def test_reference_media_buttons_submit_generic_system_actions(browser, live_server, project_root):
+    reference = load_config(project_root / "examples/conty.yaml", platform="darwin").public()
+    reference["revision"] = live_server[1].state.coordinator.snapshot.revision
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    page = context.new_page()
+    page.route(
+        "**/api/dashboard",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(reference)),
+    )
+    try:
+        page.goto(live_server[0])
+        page.locator("#code").fill(live_server[1].state.sessions.code)
+        page.locator("#pair-submit").click()
+        page.get_by_role("button", name="Media", exact=True).click()
+        for name in ("Previous", "Play / pause", "Next"):
+            page.get_by_role("button", name=name, exact=True).click()
+        expect(page.locator("#activity-list li")).to_have_count(3)
+        assert [action["command"] for action in live_server[2].calls] == [
+            "previous_track",
+            "play_pause",
+            "next_track",
+        ]
+        assert all(action["target"] == "system" for action in live_server[2].calls)
+        assert "com.apple.Music" not in page.locator("body").inner_text()
     finally:
         context.close()
 

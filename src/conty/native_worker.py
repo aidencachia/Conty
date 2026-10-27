@@ -12,6 +12,7 @@ from contextlib import nullcontext
 from conty.adapters.base import AdapterError
 from conty.adapters.macos.audio import AudioAdapter
 from conty.adapters.macos.keyboard import KeyboardAdapter
+from conty.adapters.macos.media import MediaAdapter
 from conty.adapters.macos.music import MusicAdapter
 
 
@@ -45,6 +46,11 @@ def handle(payload, adapters):
                     timeout=remaining,
                 )
             elif kind == "media":
+                target = action.get("target", "system")
+                if target == {"app_id": "com.apple.Music"}:
+                    adapter = adapters["music"]
+                elif target != "system":
+                    raise AdapterError("invalid_action", "Unsupported media target")
                 adapter.execute(action["command"], timeout=remaining)
             else:
                 adapter.execute(
@@ -66,7 +72,8 @@ def handle(payload, adapters):
 def main():
     adapters = {
         "keyboard": KeyboardAdapter(),
-        "media": MusicAdapter(supervised=True),
+        "media": MediaAdapter(),
+        "music": MusicAdapter(supervised=True),
         "volume": AudioAdapter(),
     }
     if "--persistent" not in sys.argv:
@@ -75,7 +82,7 @@ def main():
         return
     warm = sys.argv[sys.argv.index("--warm") + 1].split(",") if "--warm" in sys.argv else []
     for kind in warm:
-        if kind in ("keyboard", "volume"):
+        if kind in ("keyboard", "media", "volume"):
             try:
                 adapters[kind].prepare()
             except AdapterError:

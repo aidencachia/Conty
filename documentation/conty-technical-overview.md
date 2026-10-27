@@ -80,7 +80,7 @@ src/conty/
   auth/            # Pairing codes, sessions and rate limiting.
   adapters/
     base.py        # Platform-independent contracts and error categories.
-    macos/         # Keyboard, Apple Music, audio and permission support.
+    macos/         # Keyboard, generic media, legacy Music, audio and permissions.
     process.py     # Direct child-process execution and cleanup.
   web/             # Packaged HTML, CSS and JavaScript.
 tests/
@@ -262,13 +262,13 @@ Deliver with `CGEventPostToPid`, never global event posting or a silent global f
 
 Report success as “input dispatched,” not “slide advanced” or “screen is black.” Conty has no observed presentation state in the MVP.
 
-### Apple Music playback
+### Generic media playback
 
-Implement a dedicated adapter for the supported Apple Music bundle ID and the three named commands. Evaluate application-directed Apple Events/AppleScript without activating Music; do not fall back to global media keys or another player.
+The default media adapter posts paired macOS system media-key events for previous, play/pause and next. Preload the AppKit/Quartz bridge in the persistent worker; no scripting subprocess starts per command. Check event-posting consent without prompting, construct both events before dispatch, recheck permission/deadline immediately before posting, and always attempt key-up after a key-down attempt. Failed release disables the executor until local restart.
 
-Use fixed command templates or native calls with validated identifiers, never browser-generated automation source. An unavailable player should return a target error rather than silently launching or switching players. Check that target availability and automation do not accidentally auto-launch Music through the chosen scripting mechanism.
+`target: system` is explicit in the example and the default if omitted. macOS selects the media-key recipient, allowing Spotify and other compatible players; no named-player or observed-playback guarantee is implied. Readiness establishes posting capability, not that a player is running. Conty does not itself activate/launch a player, though OS routing may resume or launch a default player. Verify actual Spotify/browser behavior, multiple players and no-active-player behavior on the target Mac.
 
-Automation permission may be specific to the controlling application and target. A denied request must be surfaced as a permission failure, not retried repeatedly in a way that causes prompt loops.
+For backward compatibility, explicit `target: {app_id: com.apple.Music}` actions and the `music` CLI retain the original application-directed Apple Event adapter. They require their existing non-prompting Automation setup and never fall back to global media keys or another application. Generic `media` actions require Accessibility/event-posting access instead. Neither path generates automation source from browser input or requests native permission remotely.
 
 ### System output volume and mute
 

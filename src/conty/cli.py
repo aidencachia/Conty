@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from conty.adapters.base import AdapterError
 from conty.adapters.macos.audio import AudioAdapter
 from conty.adapters.macos.keyboard import SUPPORTED_KEYS, KeyboardAdapter
+from conty.adapters.macos.media import MediaAdapter
 from conty.adapters.macos.music import MusicAdapter
 from conty.adapters.process import ProcessAdapter
 
@@ -47,6 +48,11 @@ def parser() -> argparse.ArgumentParser:
         "--modifier", action="append", choices=["shift", "control", "option", "command"], default=[]
     )
     keyboard.add_argument("--timeout", type=float, default=5)
+    media = commands.add_parser(
+        "media", help="Send a system media key to the macOS-selected player"
+    )
+    media.add_argument("operation", choices=["previous_track", "play_pause", "next_track"])
+    media.add_argument("--timeout", type=float, default=5)
     music = commands.add_parser("music", help="Send one command to already-running Apple Music")
     music.add_argument("operation", choices=["previous_track", "play_pause", "next_track"])
     music.add_argument("--timeout", type=float, default=5)
@@ -88,13 +94,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "platform": sys.platform,
                 "permission_identity": "Launch-method dependent: macOS may attribute access to the launching terminal/editor (such as Terminal, iTerm, or Zed), Python, or the osascript helper; the Python path alone does not identify which app to authorize",
                 "keyboard": KeyboardAdapter().check(request_permission=not args.no_prompt),
-                "music": MusicAdapter().check(),
+                "media": MediaAdapter().check(),
                 "audio": AudioAdapter().check(),
             }
             print(json.dumps(report, indent=2))
             return (
                 0
-                if all(report[name]["available"] for name in ("keyboard", "music", "audio"))
+                if all(report[name]["available"] for name in ("keyboard", "media", "audio"))
                 else 1
             )
         if args.command == "keyboard":
@@ -105,6 +111,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 modifiers=tuple(args.modifier),
                 timeout=args.timeout,
             )
+        elif args.command == "media":
+            result = MediaAdapter().execute(args.operation, timeout=args.timeout)
         elif args.command == "music":
             result = MusicAdapter().execute(args.operation, timeout=args.timeout)
         elif args.command == "volume":

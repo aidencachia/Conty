@@ -5,7 +5,7 @@ Draft v0.2 · 19 October 2026 · project name: Conty
 
 Build Conty, a self-hosted web control panel engine that runs on a computer and exposes a browser interface for controlling that same computer. A locally edited YAML file defines the interface and the actions behind its controls.
 
-The first use case is controlling PowerPoint on a MacBook from an iPhone: next slide, previous slide and blackout. A second reference dashboard controls Apple Music playback and the host's system output volume. The architecture should also support dashboards for launching applications, running scripts and performing development tasks.
+The first use case is controlling PowerPoint on a MacBook from an iPhone: next slide, previous slide and blackout. A second reference dashboard controls generic system media playback (including Spotify through macOS media-key routing) and the host's system output volume. The architecture should also support dashboards for launching applications, running scripts and performing development tasks.
 
 Initial assumptions: one host per server instance; one trusted local owner edits the configuration; one or more paired browser clients can use the dashboard. macOS is the first supported platform. Windows and Linux are future adapter targets.
 
@@ -107,20 +107,17 @@ actions:
 
   previous_track:
     type: media
-    target:
-      app_id: "com.apple.Music"
+    target: system
     command: previous_track
 
   play_pause:
     type: media
-    target:
-      app_id: "com.apple.Music"
+    target: system
     command: play_pause
 
   next_track:
     type: media
-    target:
-      app_id: "com.apple.Music"
+    target: system
     command: next_track
 
   volume_down:
@@ -250,7 +247,7 @@ The presentation grid places Previous and Next in row 1; Blackout spans both col
 | 1 | Previous | Play / pause | Next |
 | 2 | Volume down | Mute / unmute | Volume up |
 
-The media and volume action types below are proposed Conty built-ins; they must be implemented by host adapters. This example targets Apple Music playback explicitly and the currently selected system audio output for volume.
+The media and volume action types below are Conty built-ins implemented by host adapters. This example uses macOS system media-key routing for playback and the currently selected system audio output for volume.
 
 Schema rules:
 
@@ -265,7 +262,7 @@ Schema rules:
 - Keep persistent configuration separate from execution history and live device state.
 - Fail validation for action types unsupported on the current host.
 
-The examples' application bundle IDs, key delivery and Apple Music playback behavior must be verified on the MacBook during the macOS prototype.
+The examples' application bundle IDs, key delivery and media routing must be verified on the MacBook with the intended players.
 
 ## 6. Initial actions
 
@@ -273,10 +270,10 @@ The examples' application bundle IDs, key delivery and Apple Music playback beha
 | --- | --- | --- |
 | Keyboard | Physical key, optional modifiers and optional target application/focus policy. | Deliver one key press and release to the resolved running application's PID through the host adapter. |
 | Process | Executable and argument array, optional working directory/environment references and timeout. | Start the configured process as the current user; capture bounded output and its exit result. |
-| Media | Target application ID and command: `play_pause`, `previous_track` or `next_track`. | Send the command to the named player's supported adapter without requiring it to be frontmost. |
+| Media | `target: system` (default) and command: `play_pause`, `previous_track` or `next_track`. | Post paired media-key events; macOS selects the recipient. Explicit legacy Apple Music targeting remains supported. |
 | Volume | `target: system`; operation `adjust` with integer `delta`, or `toggle_mute` without a delta. | Adjust the current system output volume or toggle its mute state. |
 
-Media playback initially requires an Apple Music adapter on macOS. Unsupported players must fail validation; an unavailable player must fail execution clearly. Do not redirect commands to a different player. Other players and global media-key routing are later extensions.
+Media playback defaults to generic macOS media keys, allowing Spotify and other players that handle those keys without per-player APIs or Automation permission. Accessibility/event-posting permission is required. The OS chooses the player; dispatch success does not prove playback changed or even that a player handled the key. Conty does not directly launch or activate an application, but macOS may launch/resume its default player. Existing explicit Apple Music targets retain their original no-fallback behavior; arbitrary application IDs are not accepted as targeted media adapters.
 
 A volume delta is a signed number of percentage points on a 0–100 scale, bounded to −100 through 100. Read the actual current output volume before each adjustment and clamp the result to 0–100. An adjustment preserves mute state; `toggle_mute` reads and inverts the actual mute state without changing the stored volume. Volume operations target the output device selected when the action executes. If software volume/mute control is unavailable, return a capability error rather than reporting success.
 
@@ -375,7 +372,7 @@ Before building the complete renderer, prove that the host can reliably activate
 The initial release is accepted when:
 
 1. An iPhone on the same LAN controls a PowerPoint slideshow on the MacBook without internet access or a phone app.
-2. A media dashboard controls Apple Music previous/play-pause/next and adjusts system output volume in 5-percentage-point steps, with mute/unmute.
+2. A media dashboard sends previous/play-pause/next through macOS media-key routing (verify Spotify and intended browser players) and adjusts system output volume in 5-percentage-point steps or by live slider, with mute/unmute.
 3. A configured process or script runs without changing frontend code.
 4. Invalid YAML reports the failing field and preserves the active configuration.
 5. Missing permissions and unavailable target apps fail clearly without sending input to another app.
