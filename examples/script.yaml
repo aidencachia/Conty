@@ -1,0 +1,21 @@
+version: 1
+actions:
+  hello:
+    type: process
+    argv: [/bin/sh, {path: scripts/hello.sh}, "a literal argument"]
+    # cwd: .
+    # env_from: {CHILD_NAME: HOST_NAME}
+dashboards:
+  - id: tools
+    title: Tools
+    sections:
+      - id: scripts
+        title: Local scripts
+        layout: {rows: 1, columns: 1}
+        widgets:
+          - id: hello
+            type: button
+            label: Run a harmless script
+            action: hello
+            appearance: primary
+            position: {row: 1, column: 1}

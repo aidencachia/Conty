@@ -125,6 +125,24 @@ class MusicTests(unittest.TestCase):
         self.killpg.assert_called_once_with(4321, signal.SIGTERM)
         self.assertEqual(self.process.communicate.call_args.kwargs, {"timeout": 0.2})
 
+    def test_supervised_music_joins_native_helper_group(self):
+        adapter = music.MusicAdapter(supervised=True)
+        adapter.execute("play_pause")
+        self.assertFalse(self.spawn.call_args.kwargs["start_new_session"])
+        self.process.communicate.side_effect = [
+            subprocess.TimeoutExpired("osascript", 0.1),
+            subprocess.TimeoutExpired("osascript", 0.2),
+            (b"", b""),
+        ]
+        with self.assertRaises(AdapterError) as caught:
+            adapter.execute("play_pause", timeout=0.1)
+        self.assertEqual(caught.exception.code, "timed_out")
+        self.killpg.assert_not_called()
+        self.assertEqual(
+            [call.args for call in self.process.send_signal.call_args_list],
+            [(signal.SIGTERM,), (signal.SIGKILL,)],
+        )
+
     def test_timeout_escalates_to_kill_then_reaps(self):
         self.process.communicate.side_effect = [
             subprocess.TimeoutExpired("osascript", 0.1),

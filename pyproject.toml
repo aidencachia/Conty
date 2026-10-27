@@ -5,9 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "conty"
 version = "0.1.0"
-description = "Local macOS host-control proof for Conty"
+description = "YAML-driven local host-control dashboard"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "ruamel.yaml>=0.18,<0.19",
+  "uvicorn>=0.30,<1",
+  "qrcode>=8,<9",
+]
 
 [project.optional-dependencies]
 macos = [
@@ -15,7 +21,7 @@ macos = [
   "pyobjc-framework-Quartz>=10.3,<13; sys_platform == 'darwin'",
   "pyobjc-framework-ApplicationServices>=10.3,<13; sys_platform == 'darwin'",
 ]
-test = ["pytest>=8,<10"]
+test = ["pytest>=8,<10", "httpx>=0.27,<1", "playwright>=1.48,<2"]
 dev = ["ruff>=0.14,<0.15"]
 
 [project.scripts]
@@ -23,6 +29,9 @@ conty = "conty.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+conty = ["web/*.html", "web/*.css", "web/*.js", "web/*.svg"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -159,6 +159,13 @@ class _Native:
             ) from exc
         self.apps, self.ax, self.cg = AppKit, ApplicationServices, Quartz
 
+    def _refresh(self):
+        # NSRunningApplication caches time-varying properties until the next
+        # main-run-loop turn. Pump without waiting, including during focus polls.
+        self.apps.NSRunLoop.currentRunLoop().runMode_beforeDate_(
+            self.apps.NSDefaultRunLoopMode, self.apps.NSDate.date()
+        )
+
     def trusted(self):
         return bool(self.ax.AXIsProcessTrusted())
 
@@ -169,6 +176,7 @@ class _Native:
         )
 
     def resolve(self, app_id):
+        self._refresh()
         apps = [
             app
             for app in self.apps.NSRunningApplication.runningApplicationsWithBundleIdentifier_(
@@ -184,18 +192,21 @@ class _Native:
         return apps[0]
 
     def current_application(self):
+        self._refresh()
         app = self.apps.NSWorkspace.sharedWorkspace().frontmostApplication()
         if app is None or app.isTerminated():
             raise AdapterError("target_unavailable", "No running frontmost application")
         return app
 
     def is_running(self, app):
+        self._refresh()
         return not app.isTerminated()
 
     def pid(self, app):
         return int(app.processIdentifier())
 
     def frontmost(self, pid):
+        self._refresh()
         app = self.apps.NSWorkspace.sharedWorkspace().frontmostApplication()
         return app is not None and self.pid(app) == pid
 
@@ -231,7 +242,13 @@ class KeyboardAdapter:
         self._bridge = bridge
 
     def _native(self):
-        return self._bridge if self._bridge is not None else _Native()
+        if self._bridge is None:
+            self._bridge = _Native()
+        return self._bridge
+
+    def prepare(self):
+        """Load the bridge without prompting, resolving a target or sending input."""
+        self._native()
 
     def check(self, *, request_permission: bool = False) -> dict:
         """Check capability; optionally request consent, never send input."""

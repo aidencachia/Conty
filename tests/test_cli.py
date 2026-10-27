@@ -29,6 +29,29 @@ def adapters(monkeypatch):
     return factories
 
 
+def test_validate_command_is_passive_and_reports_errors(config_file, adapters, capsys):
+    assert cli.main(["validate", str(config_file)]) == 0
+    assert "valid" in capsys.readouterr().out
+    config_file.write_text("version: invalid")
+    assert cli.main(["validate", str(config_file)]) == 1
+    assert "version" in capsys.readouterr().err
+    for factory in adapters.values():
+        factory.assert_not_called()
+
+
+def test_serve_forwards_the_owner_config_without_invoking_native_adapters(
+    config_file, adapters, monkeypatch
+):
+    from conty import service
+
+    serve = Mock()
+    monkeypatch.setattr(service, "serve", serve)
+    assert cli.main(["serve", str(config_file)]) == 0
+    serve.assert_called_once_with(str(config_file))
+    for factory in adapters.values():
+        factory.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "argv,key,app_id,focus,modifiers,timeout",
     [

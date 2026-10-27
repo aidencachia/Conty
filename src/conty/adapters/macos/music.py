@@ -117,23 +117,29 @@ _SCRIPTS = {
 }
 
 
-def _stop(process):
+def _stop(process, *, supervised=False):
     """Terminate the helper's session and drain/reap, including on timeout."""
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        if supervised:
+            process.send_signal(signal.SIGTERM)
+        else:
+            os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
         pass
     try:
         process.communicate(timeout=0.2)
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            if supervised:
+                process.send_signal(signal.SIGKILL)
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         process.communicate(timeout=1)
 
 
-def _run(script: str, timeout: float, *, effects_possible: bool) -> str:
+def _run(script: str, timeout: float, *, effects_possible: bool, supervised=False) -> str:
     if sys.platform != "darwin":
         raise AdapterError("capability_unavailable", "Apple Music control requires macOS")
     deadline = time.monotonic() + timeout
@@ -143,7 +149,7 @@ def _run(script: str, timeout: float, *, effects_possible: bool) -> str:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            start_new_session=True,
+            start_new_session=not supervised,
             env={"PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8"},
         )
     except OSError as exc:
@@ -154,7 +160,10 @@ def _run(script: str, timeout: float, *, effects_possible: bool) -> str:
         stdout, _stderr = process.communicate(timeout=max(0, deadline - time.monotonic()))
     except BaseException as exc:
         try:
-            _stop(process)
+            if supervised:
+                _stop(process, supervised=True)
+            else:
+                _stop(process)
         except (OSError, subprocess.TimeoutExpired) as cleanup_error:
             raise AdapterError(
                 "executor_unavailable",
@@ -193,8 +202,9 @@ def _run(script: str, timeout: float, *, effects_possible: bool) -> str:
 
 
 class MusicAdapter:
-    def __init__(self) -> None:
+    def __init__(self, *, supervised=False) -> None:
         self._unavailable = False
+        self._supervised = supervised
 
     def _invoke(self, script, timeout, *, effects_possible):
         if self._unavailable:
@@ -203,6 +213,8 @@ class MusicAdapter:
                 "Previous helper cleanup was not confirmed; restart the executor after local recovery",
             )
         try:
+            if self._supervised:
+                return _run(script, timeout, effects_possible=effects_possible, supervised=True)
             return _run(script, timeout, effects_possible=effects_possible)
         except AdapterError as exc:
             if exc.code == "executor_unavailable":

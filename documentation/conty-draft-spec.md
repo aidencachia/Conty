@@ -20,7 +20,7 @@ The initial release must:
 - Give clients clear connection and execution feedback.
 - Support PowerPoint and media/volume remotes as reference configurations.
 
-Later releases may add sequences, toggles, sliders, status widgets and additional application-specific integrations.
+The simplified dashboard also supports a system-volume slider with observed state and a bounded integer input. Later releases may add sequences, toggles, other sliders/status widgets and additional application-specific integrations.
 
 A visual dashboard editor, public internet hosting, a central account service, screen streaming, arbitrary remote terminal access and controlling other computers are outside the initial release. Conty is a configurable control panel engine; YAML remains the source of truth.
 
@@ -53,7 +53,7 @@ The web server and executor can live in one process initially. Platform adapters
 
 ## 5. YAML model
 
-This is the proposed Milestone 2 configuration model. Milestone 1 provides adapters and a local CLI only; no YAML loader is implemented yet.
+Milestone 2 implements this configuration model. See the [Milestone 2 guide](milestone-2-dashboard.md) for the precise version-1 schema, limits and acceptance status.
 
 Use a versioned, declarative schema with four main areas:
 
@@ -72,6 +72,7 @@ version: 1
 server:
   bind: "0.0.0.0"
   port: 8765
+  allowed_hosts: ["192.168.1.20"] # Replace with the host's actual LAN address.
   auth:
     mode: pairing_code
 
@@ -235,6 +236,7 @@ dashboards:
 - Every section declares positive integer `layout.rows` and `layout.columns`.
 - Every widget declares positive integer `position.row` and `position.column`. Coordinates start at **1** in the top-left corner and are relative to the containing section.
 - Optional `position.row_span` and `position.column_span` default to 1 and must be positive integers.
+- Alternatively use `size: {width: 2, height: 1}` for column/row spans. A single-grid dashboard can declare `layout` and `widgets` directly; existing section-based configurations remain supported. Tiles display a title (`label`) and a plain-text `symbol`.
 - A widget occupies all cells in its rectangular span. Its occupied cells must remain inside the declared grid and must not overlap another widget.
 - Empty cells are allowed and remain empty. The MVP does not auto-place widgets.
 - Sections appear vertically in configuration order. Row/column positions apply within each section, not across the entire page.
@@ -257,6 +259,7 @@ Schema rules:
 - Give errors a configuration path, such as `dashboards[0].sections[0].widgets[1].action`, and a line/column where available.
 - Define key names and modifiers independently of the underlying OS key codes.
 - Resolve relative script paths and working directories against the configuration directory.
+- Mark path arguments explicitly, e.g. `argv: ["/bin/sh", {path: "scripts/task.sh"}]`. Ordinary argument strings stay literal. Require an absolute executable at `argv[0]`; default `cwd` to the configuration directory.
 - Require process arguments as an array; do not implicitly run them through a shell.
 - Allow optional `cwd`, `env_from` and per-action timeout for process actions. `env_from` maps child environment names to existing host environment names; values are never returned to clients.
 - Keep persistent configuration separate from execution history and live device state.
@@ -277,7 +280,9 @@ Media playback initially requires an Apple Music adapter on macOS. Unsupported p
 
 A volume delta is a signed number of percentage points on a 0–100 scale, bounded to −100 through 100. Read the actual current output volume before each adjustment and clamp the result to 0–100. An adjustment preserves mute state; `toggle_mute` reads and inverts the actual mute state without changing the stored volume. Volume operations target the output device selected when the action executes. If software volume/mute control is unavailable, return a capability error rather than reporting success.
 
-For the MVP, volume uses buttons. A continuous slider and a displayed live percentage require a state binding and remain later features. Play/pause and mute buttons do not imply that their current state is known to the browser.
+Volume may use buttons or an observed system-volume slider. A slider references a configured `volume` action with `operation: set`, accepts only integer values 0–100 and reads actual host state before enabling. Its preview updates immediately and live writes stream at up to 20/second, keeping one in-flight update plus only the latest unsent value. Release preserves the final selection; cancellation discards unsent values but cannot undo accepted changes. Width/height in cells determine horizontal or vertical orientation. Play/pause and mute buttons remain stateless commands.
+
+Slider widgets offer `style: standard` for the original track/thumb (the default) and `style: ios` for a broad rounded filled control. Both styles share volume semantics, touch/mouse and keyboard support, and unknown-state handling.
 
 Scripts can be invoked using a configured interpreter and script path. Browser clients cannot supply arbitrary arguments, executable names or script contents in the first release.
 
@@ -316,7 +321,7 @@ A valid reload creates a new revision. Allow the active invocation to finish aga
 
 ## 9. Host access and permissions
 
-Bind to loopback by default. LAN access is an explicit configuration choice, as in the example. Require pairing for control access; generate temporary codes at runtime, limit pairing attempts and allow the owner to revoke sessions.
+When `server.bind` is omitted, detect the host's active-route IPv4 address; fall back to loopback if no usable route is available. An explicit YAML bind address always takes precedence, including loopback-only access. Only the selected address and explicitly allowed hosts are accepted. Require pairing for control access; generate temporary codes at runtime, limit pairing attempts and allow the owner to revoke sessions. Automatic LAN binding is for trusted private networks only.
 
 Authorize every action/status request. Validate request origins and accepted Host values, and protect cookie-authenticated mutations against cross-site requests. Configuration files are trusted executable input: editing them is equivalent to granting access to the host user's capabilities.
 
@@ -347,7 +352,7 @@ conty validate conty.yaml
 conty serve conty.yaml
 ```
 
-These are proposed Conty CLI commands, not an implemented interface.
+These commands are implemented in Milestone 2. Configuration edits require restart until Milestone 3 adds atomic reload.
 
 ## 11. Implementation direction
 
@@ -365,7 +370,7 @@ Before building the complete renderer, prove that the host can reliably activate
 
 **Milestone 3 — dependable daily use:** configuration reload, duplicate-request handling, bounded history, reconnect behavior, setup instructions and packaging.
 
-**Later:** sequences, additional media/application integrations, observed state, toggles/sliders with bounded typed inputs, reusable profiles, and Windows/Linux adapters. A visual editor should write the same YAML schema.
+**Later:** sequences, additional media/application integrations, additional observed-state bindings and toggles/sliders with bounded typed inputs, reusable profiles, and Windows/Linux adapters. A visual editor should write the same YAML schema.
 
 The initial release is accepted when:
 
@@ -395,4 +400,3 @@ The initial release is accepted when:
 - Apple: [Audio Devices window of Audio MIDI Setup](https://support.apple.com/en-euro/guide/audio-midi-setup/ams1010/mac). Software volume controls depend on output-device capabilities.
 - Apple: [Apple Events entitlement](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.security.automation.apple-events).
 - MDN: [WakeLock](https://developer.mozilla.org/en-US/docs/Web/API/WakeLock). Wake-lock support requires a secure context, so an ordinary HTTP LAN page cannot promise automatic screen wakefulness.
-

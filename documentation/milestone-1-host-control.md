@@ -2,13 +2,13 @@
 
 ## Status
 
-The adapters, local CLI and automated tests are implemented. **The hardware gate is not yet passed.** The target MacBook, PowerPoint slideshow with presentation display, Apple Music and actual audio output must be tested by the owner before claiming native reliability.
+The adapters, local CLI and automated tests are implemented. The owner reported completing the Milestone 1 hardware proof during Milestone 2 planning on 19 October 2026. Per-case results and application/display versions were not supplied, so the checklist below preserves its historical pending entries rather than inventing evidence. The separate [Milestone 2 server/helper acceptance](milestone-2-dashboard.md#hardware-acceptance) remains to be recorded.
 
 Implementation environment: Python 3.11.1; PyObjC 12.2.2; pytest 9.1.1. Dependency ranges live in `pyproject.toml`; these are the versions used for this validation, not a claim of testing every compatible version. Application, macOS and presentation-display versions remain to be recorded during acceptance.
 
 ## Local entry point
 
-Install from the repository as described in the README. `conty --help` and each subcommand's `--help` describe all arguments. `python -m conty` is an equivalent entry point. There is no network listener and no native action runs on import.
+Install from the repository as described in the README. `conty --help` and each subcommand's `--help` describe all arguments. `python -m conty` is an equivalent entry point. Local diagnostic commands do not listen on the network and no native action runs on import. Milestone 2 adds an explicit `serve` command.
 
 Use a stable terminal and Python installation throughout the proof. Run in the logged-in user's desktop session; never elevate permissions. The future packaged host may have a different TCC identity and must be separately validated.
 
@@ -130,4 +130,4 @@ No input, playback or audio-changing native actions were run. Serialized executi
 
 ## Milestone 2 boundary
 
-The current CLI is owner-local. Before remote use, add the specified strict configuration pipeline, public projection, pairing/security, bounded serialized dispatcher and API feedback. Native hang supervision and validated PowerPoint targeting must be resolved before treating the host as a dependable remotely controlled service.
+The diagnostic CLI remains owner-local. Milestone 2 now supplies the strict configuration pipeline, public projection, pairing/security, bounded serialized dispatcher, native helper supervision and API feedback. See the [Milestone 2 guide](milestone-2-dashboard.md) for the implemented boundary and remaining server-path hardware acceptance.

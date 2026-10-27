@@ -1,4 +1,4 @@
-"""Local-only diagnostic interface. No web server or remote command input."""
+"""Owner-local configuration, dashboard service and host-control diagnostics."""
 
 from __future__ import annotations
 
@@ -18,9 +18,13 @@ from conty.adapters.process import ProcessAdapter
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(
-        description="Conty Milestone 1: explicit local host-control tests"
+        description="Conty: YAML-driven host-control dashboard and local diagnostics"
     )
     commands = root.add_subparsers(dest="command", required=True)
+    validate = commands.add_parser("validate", help="Validate a dashboard without native effects")
+    validate.add_argument("config")
+    serve = commands.add_parser("serve", help="Serve a paired browser dashboard")
+    serve.add_argument("config")
     doctor = commands.add_parser(
         "doctor", help="Check capabilities and request missing Accessibility access"
     )
@@ -62,6 +66,21 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        if args.command in ("validate", "serve"):
+            from conty.config import ConfigurationError, load_config
+
+            try:
+                if args.command == "validate":
+                    load_config(args.config)
+                    print("Configuration is valid")
+                else:
+                    from conty.service import serve
+
+                    serve(args.config)
+            except ConfigurationError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            return 0
         if args.command == "doctor":
             report = {
                 "python": sys.executable,

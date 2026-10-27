@@ -103,6 +103,48 @@ class AudioTests(unittest.TestCase):
                 self.assertEqual(result.details["effect_confirmation"], "readback")
         self.assertTrue(all(w[1] == "volume" for w in self.bridge.writes))
 
+    def test_deadline_expiry_during_preflight_prevents_the_write(self):
+        with patch.object(audio.time, "monotonic", side_effect=[0, 0, 2]):
+            with self.assertRaises(AdapterError) as caught:
+                self.adapter.execute("adjust", 5, timeout=1)
+        self.assertEqual(caught.exception.code, "timed_out")
+        self.assertFalse(caught.exception.effects_possible)
+        self.assertEqual(self.bridge.writes, [])
+
+    def test_deadline_expiry_after_write_reports_possible_effects(self):
+        with patch.object(audio.time, "monotonic", side_effect=[0, 0, 0, 2]):
+            with self.assertRaises(AdapterError) as caught:
+                self.adapter.execute("adjust", 5, timeout=1)
+        self.assertEqual(caught.exception.code, "timed_out")
+        self.assertTrue(caught.exception.effects_possible)
+        self.assertEqual(len(self.bridge.writes), 1)
+
+    def test_set_volume_preserves_actual_mute_and_readback(self):
+        for muted in (0, 1):
+            self.bridge.mute = muted
+            for value in (0, 37, 100):
+                result = self.adapter.execute("set", value=value)
+                self.assertAlmostEqual(self.bridge.volume, value / 100)
+                self.assertEqual(self.bridge.mute, muted)
+                self.assertEqual(result.details["muted"], bool(muted))
+
+    def test_invalid_set_values_fail_before_native_access(self):
+        for value in (None, True, False, -1, 101, 2.5, "50"):
+            with self.assertRaises(AdapterError) as caught:
+                self.adapter.execute("set", value=value)
+            self.assertEqual(caught.exception.code, "invalid_action")
+        self.assertEqual(self.bridge.resolves, 0)
+        self.assertEqual(self.bridge.writes, [])
+
+    def test_read_is_observed_and_never_writes(self):
+        self.bridge.volume = 0.63
+        self.bridge.mute = 1
+        self.assertEqual(self.adapter.read(), {"value": 63, "muted": True})
+        self.assertEqual(self.bridge.writes, [])
+        self.bridge.change_at = self.bridge.resolves + 2
+        with self.assertRaises(AdapterError):
+            self.adapter.read()
+
     def test_clamp_and_zero_delta(self):
         for initial, delta, expected in (
             (0.97, 5, 1),

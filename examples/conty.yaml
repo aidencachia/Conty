@@ -1,0 +1,122 @@
+# Remove server.bind to detect the host's network IP automatically.
+# An explicit bind overrides detection; use 127.0.0.1 for local-only access.
+version: 1
+server:
+  port: 8765
+defaults:
+  action_timeout_seconds: 5
+actions:
+  previous_slide:
+    type: keyboard
+    target: {app_id: com.microsoft.Powerpoint, focus: activate}
+    key: left
+  next_slide:
+    type: keyboard
+    target: {app_id: com.microsoft.Powerpoint, focus: activate}
+    key: right
+  blackout:
+    type: keyboard
+    target: {app_id: com.microsoft.Powerpoint, focus: activate}
+    key: b
+  open_powerpoint:
+    type: process
+    argv: [/usr/bin/open, -a, Microsoft PowerPoint]
+  previous_track:
+    type: media
+    target: {app_id: com.apple.Music}
+    command: previous_track
+  play_pause:
+    type: media
+    target: {app_id: com.apple.Music}
+    command: play_pause
+  next_track:
+    type: media
+    target: {app_id: com.apple.Music}
+    command: next_track
+  volume_down:
+    type: volume
+    target: system
+    operation: adjust
+    delta: -5
+  mute:
+    type: volume
+    target: system
+    operation: toggle_mute
+  volume_up:
+    type: volume
+    target: system
+    operation: adjust
+    delta: 5
+  volume_level:
+    type: volume
+    target: system
+    operation: set
+dashboards:
+  - id: presentation
+    title: Presentation
+    layout: {rows: 3, columns: 3}
+    widgets:
+      - id: previous
+        type: button
+        label: Previous
+        symbol: "←"
+        action: previous_slide
+        position: {row: 1, column: 1}
+      - id: next
+        type: button
+        label: Next
+        symbol: "→"
+        action: next_slide
+        appearance: primary
+        position: {row: 1, column: 3}
+      - id: blackout
+        type: button
+        label: Blackout / restore
+        symbol: "◐"
+        action: blackout
+        position: {row: 2, column: 1}
+        size: {width: 3, height: 1}
+      - id: launch
+        type: button
+        label: Open PowerPoint
+        symbol: "↗"
+        action: open_powerpoint
+        position: {row: 3, column: 1}
+        size: {width: 3, height: 1}
+  - id: media
+    title: Media
+    layout: {rows: 3, columns: 2}
+    widgets:
+      - id: previous_track
+        type: button
+        label: Previous
+        symbol: "⏮"
+        action: previous_track
+        position: {row: 1, column: 1}
+      - id: play_pause
+        type: button
+        label: Play / pause
+        symbol: "⏯"
+        action: play_pause
+        appearance: primary
+        position: {row: 1, column: 2}
+      - id: next_track
+        type: button
+        label: Next
+        symbol: "⏭"
+        action: next_track
+        position: {row: 2, column: 1}
+      - id: volume
+        type: slider
+        style: ios # Use standard for the original track-and-thumb slider.
+        label: Volume
+        symbol: "♫"
+        action: volume_level
+        position: {row: 2, column: 2}
+        size: {width: 1, height: 2}
+      - id: mute
+        type: button
+        label: Mute
+        symbol: "⊘"
+        action: mute
+        position: {row: 3, column: 1}

@@ -5,7 +5,7 @@ Draft v0.1 · 19 October 2026 · companion to the [draft project specification](
 
 This document describes how to implement Conty as a local host service with a browser-based remote control panel. It translates the product specification into component boundaries, data flows, execution rules and an incremental delivery plan without prescribing every class, function or library.
 
-The [draft project specification](conty-draft-spec.md) remains the source of product requirements and YAML semantics. This document primarily proposes an implementation approach. Milestone 1 adapters and a local CLI now exist; their current contract and pending hardware acceptance are documented in the [host-control guide](milestone-1-host-control.md). The YAML loader, server and dashboard remain Milestone 2 work. Proposed defaults, additional routes and local management commands should be confirmed during implementation and recorded in the public documentation before release.
+The [draft project specification](conty-draft-spec.md) remains the source of product requirements and YAML semantics. This document records the architectural direction, including future Milestone 3 behavior. Milestone 1 adapters and local CLI are implemented; the owner reported hardware proof complete. Milestone 2 now implements the YAML loader, server, supervised executor and dashboard. The [Milestone 2 guide](milestone-2-dashboard.md) is the source for its exact interfaces, defaults and outstanding server-path hardware acceptance. Reload, local management and request-ID recovery proposals below remain future work.
 
 The initial target is a MacBook controlled from iPhone Safari on a trusted private LAN. One service instance controls one host, runs as its logged-in user and accepts multiple paired browsers. Windows/Linux adapters, stateful widgets, sequences and public internet deployment are not part of the MVP.
 
@@ -33,7 +33,7 @@ flowchart TD
 
 The key boundary is between a **declarative client** and an **authoritative host**. The browser renders a dashboard and requests a named action. Only the host decides what that action means, whether it is available and how it executes. No executable path, script, environment value or arbitrary command parameter is accepted from a browser.
 
-Keep the API, scheduler and runtime state in one operating-system process initially. A short-lived helper or subprocess may perform a particular native operation where isolation is necessary, but it must not become an independent source of scheduling or authorization decisions.
+Keep the API, scheduler and runtime state in one operating-system process initially. Milestone 2 uses one persistent supervised native worker for low-latency dispatch and separate read-only probe processes. Neither owns scheduling or authorization decisions; the host coordinator remains authoritative.
 
 ### Core responsibilities
 
@@ -121,7 +121,7 @@ A snapshot contains the schema version, an opaque runtime revision, normalized a
 
 Generate a fresh revision on startup and every successful reload, even if the file contents happen to match a previous version. Use an opaque random identifier rather than a hash of configuration contents; the revision identifies an activation, not the contents of potentially sensitive configuration.
 
-Resolve relative working directories and script paths against the configuration directory, as required by the product specification. Since `argv` may contain ordinary strings as well as paths, do not guess which arbitrary arguments are filenames or assume that changing the child working directory resolves this when an explicit `cwd` is present. Before freezing version 1, define an explicit script-path representation that the loader can normalize into interpreter arguments, or a documented set of unambiguous interpreter invocation forms. This is a schema clarification to resolve alongside the product specification, not a reason to require absolute script paths or silently reinterpret arbitrary arguments. Bare executable names, if supported, should be resolved against a controlled host `PATH`, with the resolved executable recorded locally.
+Version 1 resolves relative working directories and explicit `{path: ...}` arguments against the configuration directory. Ordinary `argv` strings remain literal, including when `cwd` differs. The executable at `argv[0]` must be an absolute string path; bare-name PATH lookup is not supported. The default child working directory is the configuration directory.
 
 ### Public projection
 
@@ -136,7 +136,7 @@ Build this projection with an explicit allowlist of fields. Do not serialize the
 1. Resolve the configuration and local state paths; initialize bounded logging without dumping configuration or inherited environment values.
 2. Load and validate the initial snapshot. Exit with diagnostics if it is invalid; there is no older running revision to preserve on first startup.
 3. Initialize adapters, runtime stores, the coordinator and the single execution worker.
-4. Bind the configured interface and port. Loopback is the default; LAN binding is an explicit owner decision.
+4. Bind the configured interface and port. When the YAML omits `bind`, discover the active-route IPv4 address without sending packets; use loopback if discovery fails. Explicit addresses bypass discovery. Resolve once per launch and keep Host validation restricted to the selected IP and configured allowed hosts.
 5. Report local connection information and, for LAN mode, usable candidate LAN URLs. Do not present `0.0.0.0` as a phone destination.
 6. Generate a short-lived pairing code and display it locally with a QR code containing the connection URL, not a session credential.
 
@@ -200,7 +200,7 @@ These are starting values to confirm through testing, not additions to the YAML 
 | Deduplication/status retention | Keep every nonterminal invocation; retain terminal request records for at least 15 minutes after completion. |
 | Request-record capacity | 10,000 retained records; reject new work when necessary rather than evict unexpired guarantees. |
 | Local detailed history | Most recent 1,000 records with bounded diagnostic/output payloads. |
-| Process output | At most 64 KiB retained per stream; continue draining excess output without retaining it. |
+| Process output | At most 16 KiB retained per stream; continue draining excess output without retaining it. |
 | Pairing | Code valid for 2 minutes, consumed on success; limit attempts per source and across the host. |
 | Sessions | Fixed 8-hour lifetime for the prototype, revocable locally. |
 
@@ -305,7 +305,7 @@ Return a consistent error envelope with a stable error code, safe human-readable
 
 A stale-revision response should identify the active revision and direct the browser to fetch the new dashboard, without executing the old request. Unauthorized or cross-session invocation lookups should not reveal whether another client's invocation exists.
 
-Poll invocation status while relevant work is outstanding and poll overall status at a modest interval. Suggested starting intervals are 250–500 ms for active invocations and 2 seconds for readiness, with backoff and jitter after failures. Bound concurrent polls and reduce activity in background tabs.
+Milestone 2 uses one bounded batched long poll for active invocation IDs: return immediately on a state change or after two seconds. This removes the former 250–500 ms feedback delay without WebSockets. Overall status is polled every two seconds, with backoff after failures and reduced activity in background tabs. See the Milestone 2 guide for the batch route and measured latency.
 
 ## 12. Pairing and request security
 
@@ -444,6 +444,6 @@ Keep persistent user configuration separate from packaged assets and disposable 
 - **Operational limits:** final queue, rate, pairing, session, output and retention settings, based on measured behavior and documented guarantees.
 - **Local management:** final CLI syntax and safe per-user management channel behavior.
 - **HTTPS:** supported certificate/proxy setup and phone trust instructions before any untrusted-network deployment.
-- **Future state model:** an explicit observed-state source before adding toggles, sliders or displayed playback/volume state.
+- **Future state model:** extend the observed-state approach used by the system-volume slider before adding toggles, other sliders or displayed playback state.
 
 Record resolved choices in small architecture decision notes where a tradeoff is significant. Keep later extensions behind the existing schema, coordinator and adapter boundaries rather than weakening the initial security and execution contract.

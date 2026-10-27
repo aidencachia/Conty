@@ -25,8 +25,9 @@ from __future__ import annotations
 import ctypes
 import math
 import sys
+import time
 
-from conty.adapters.base import ActionResult, AdapterError
+from conty.adapters.base import ActionResult, AdapterError, validate_timeout
 
 
 def _fourcc(value: str) -> int:
@@ -157,7 +158,13 @@ class AudioAdapter:
         self._bridge = bridge
 
     def _native(self):
-        return self._bridge if self._bridge is not None else _Native()
+        if self._bridge is None:
+            self._bridge = _Native()
+        return self._bridge
+
+    def prepare(self):
+        """Load Core Audio without reading or changing a device."""
+        self._native()
 
     @staticmethod
     def _same_device(bridge, device):
@@ -226,36 +233,64 @@ class AudioAdapter:
                 **details,
             }
 
-    def execute(self, operation: str, delta: int | None = None) -> ActionResult:
-        if not isinstance(operation, str) or operation not in ("adjust", "toggle_mute"):
-            raise AdapterError("invalid_action", "Supported operations are adjust and toggle_mute")
+    def execute(
+        self,
+        operation: str,
+        delta: int | None = None,
+        *,
+        timeout: float | None = None,
+        value: int | None = None,
+    ) -> ActionResult:
+        if not isinstance(operation, str) or operation not in ("adjust", "toggle_mute", "set"):
+            raise AdapterError(
+                "invalid_action", "Supported operations are adjust, set and toggle_mute"
+            )
         if operation == "adjust":
             if type(delta) is not int or not -100 <= delta <= 100:
                 raise AdapterError(
                     "invalid_action", "adjust requires an integer delta from -100 to 100"
                 )
         elif delta is not None:
-            raise AdapterError("invalid_action", "toggle_mute does not accept a delta")
+            raise AdapterError("invalid_action", "Only adjust accepts delta")
+        if operation == "set":
+            if type(value) is not int or not 0 <= value <= 100:
+                raise AdapterError("invalid_action", "set requires an integer value from 0 to 100")
+        elif value is not None:
+            raise AdapterError("invalid_action", "Only set accepts value")
+
+        if timeout is not None:
+            validate_timeout(timeout)
+        deadline = time.monotonic() + timeout if timeout is not None else None
+
+        def check_deadline():
+            if deadline is not None and time.monotonic() >= deadline:
+                raise AdapterError("timed_out", "Audio deadline expired")
 
         effects = False
         try:
+            check_deadline()
             bridge = self._native()
             device = bridge.default_output()
             self._same_device(bridge, device)
             self._require_capabilities(self._capabilities(bridge, device))
             volume, mute = self._state(bridge, device)
-            if operation == "adjust":
-                name, value = "volume", min(1.0, max(0.0, volume + delta / 100))
-                expected_volume, expected_mute = value, mute
+            if operation in ("adjust", "set"):
+                new_value = (
+                    value / 100 if operation == "set" else min(1.0, max(0.0, volume + delta / 100))
+                )
+                name, value = "volume", new_value
+                expected_volume, expected_mute = new_value, mute
             else:
                 name, value = "mute", int(not mute)
                 expected_volume, expected_mute = volume, not mute
             self._same_device(bridge, device)
+            check_deadline()
             effects = True  # Even a failed setter may have reached the device.
             bridge.write(device, name, value)
             self._same_device(bridge, device)
             actual_volume, actual_mute = self._state(bridge, device)
             self._same_device(bridge, device)
+            check_deadline()
             # Float32 roundoff only, not a promise to accept arbitrary device steps.
             if (
                 not math.isclose(actual_volume, expected_volume, rel_tol=0, abs_tol=1e-6)
@@ -266,7 +301,7 @@ class AudioAdapter:
                     "Audio readback did not confirm the requested state and preserved control",
                 )
             return ActionResult(
-                "Output volume adjusted" if operation == "adjust" else "Output mute toggled",
+                "Output mute toggled" if operation == "toggle_mute" else "Output volume adjusted",
                 {
                     "device_id": device,
                     "operation": operation,
@@ -283,3 +318,18 @@ class AudioAdapter:
             raise AdapterError(
                 "execution_failed", "macOS audio operation failed", effects_possible=effects
             ) from exc
+
+    def read(self) -> dict:
+        """Observe the selected output without changing it or prompting."""
+        try:
+            bridge = self._native()
+            device = bridge.default_output()
+            self._same_device(bridge, device)
+            self._require_capabilities(self._capabilities(bridge, device))
+            volume, mute = self._state(bridge, device)
+            self._same_device(bridge, device)
+            return {"value": round(volume * 100), "muted": bool(mute)}
+        except AdapterError:
+            raise
+        except Exception as exc:
+            raise AdapterError("capability_unavailable", "System volume could not be read") from exc

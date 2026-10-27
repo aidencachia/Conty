@@ -92,6 +92,15 @@ class KeyboardTests(unittest.TestCase):
         self.assertTrue(adapter.check()["available"])
         self.load.assert_called_once_with()
 
+    def test_prepared_bridge_is_reused_but_live_permission_is_rechecked(self):
+        adapter = keyboard.KeyboardAdapter()
+        adapter.prepare()
+        self.assertTrue(adapter.check()["available"])
+        adapter.execute("space")
+        self.load.assert_called_once_with()
+        self.native.allowed = False
+        self.assertFalse(adapter.check()["available"])
+
     def assert_error(self, code, *, effects=False, **kwargs):
         with self.assertRaises(AdapterError) as caught:
             self.adapter.execute(**{"key": "right", "app_id": "org.example.Editor", **kwargs})
@@ -349,6 +358,7 @@ class NativeTranslationTests(unittest.TestCase):
 
         native = object.__new__(keyboard._Native)
         workspace = Mock()
+        native._refresh = Mock()
         native.apps = SimpleNamespace(
             NSWorkspace=SimpleNamespace(sharedWorkspace=lambda: workspace)
         )
@@ -361,6 +371,20 @@ class NativeTranslationTests(unittest.TestCase):
         workspace.frontmostApplication.return_value = app
         self.assertIs(native.current_application(), app)
         self.assertTrue(native.is_running(app))
+
+    def test_run_loop_is_pumped_without_waiting_before_native_state_reads(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        native = object.__new__(keyboard._Native)
+        loop = Mock()
+        native.apps = SimpleNamespace(
+            NSRunLoop=SimpleNamespace(currentRunLoop=lambda: loop),
+            NSDefaultRunLoopMode="default",
+            NSDate=SimpleNamespace(date=lambda: "now"),
+        )
+        native._refresh()
+        loop.runMode_beforeDate_.assert_called_once_with("default", "now")
 
     def test_accessibility_request_uses_native_prompt_option(self):
         from types import SimpleNamespace
